@@ -7,7 +7,7 @@ CLIENT_ID = os.getenv("BULLHORN_CLIENT_ID")
 CLIENT_SECRET = os.getenv("BULLHORN_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("BULLHORN_REFRESH_TOKEN")
 REST_URL = os.getenv("BULLHORN_REST_URL")  # https://rest70.bullhornstaffing.com/rest-services/7o3wld/
-SWIMLANE = "rest70"
+SWIMLANE = "ger"
 
 PLECTO_AUTH = os.getenv("PLECTO_AUTH")
 
