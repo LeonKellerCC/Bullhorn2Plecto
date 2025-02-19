@@ -13,7 +13,7 @@ PLECTO_AUTH = os.getenv("PLECTO_AUTH")
 
 def refresh_access_token(refresh_token):
     """ Holt einen neuen Access Token mit dem Refresh Token. """
-    url = f"https://auth-{SWIMLANE}.bullhornstaffing.com/oauth/token"
+    url = f"https://auth70.bullhornstaffing.com/oauth/token"  # 🔧 Korrektur hier
     payload = {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
