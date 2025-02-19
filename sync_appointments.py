@@ -3,37 +3,47 @@ import requests
 import json
 
 # Umgebungsvariablen aus GitHub Actions
-ACCESS_TOKEN = os.getenv("BULLHORN_ACCESS_TOKEN")
+CLIENT_ID = os.getenv("BULLHORN_CLIENT_ID")
+CLIENT_SECRET = os.getenv("BULLHORN_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("BULLHORN_REFRESH_TOKEN")
-BHREST_TOKEN = os.getenv("BULLHORN_BHREST_TOKEN")
-REST_URL = os.getenv("BULLHORN_REST_URL")
+REST_URL = os.getenv("BULLHORN_REST_URL")  # https://rest70.bullhornstaffing.com/rest-services/7o3wld/
+SWIMLANE = "rest70"
+
 PLECTO_AUTH = os.getenv("PLECTO_AUTH")
-SWIMLANE = "ger"
 
 def refresh_access_token(refresh_token):
-    """ Holt einen neuen Access Token, wenn der alte abgelaufen ist. """
+    """ Holt einen neuen Access Token mit dem Refresh Token. """
     url = f"https://auth-{SWIMLANE}.bullhornstaffing.com/oauth/token"
-    data = {
+    payload = {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
-        "client_id": os.getenv("BULLHORN_CLIENT_ID"),
-        "client_secret": os.getenv("BULLHORN_CLIENT_SECRET")
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    response = requests.post(url, data=data, headers=headers)
+    response = requests.post(url, data=payload, headers=headers)
     response.raise_for_status()
     tokens = response.json()
-    print(f"🔄 Neuer Access Token: {tokens.get('access_token')}")
-    return tokens
+    print(f"🔄 Neuer Access Token erhalten.")
+    return tokens.get("access_token"), tokens.get("refresh_token")
 
-def get_appointments():
+def get_bhrest_token(access_token):
+    """ Holt BhRestToken und restUrl basierend auf dem Access Token. """
+    login_url = (
+        f"https://rest-{SWIMLANE}.bullhornstaffing.com/rest-services/login?version=2.0"
+        f"&access_token={access_token}"
+    )
+    response = requests.post(login_url)
+    response.raise_for_status()
+    login_info = response.json()
+    print("🗝️ BhRestToken abgerufen.")
+    return login_info.get("BhRestToken"), login_info.get("restUrl")
+
+def get_appointments(bhrest_token, rest_url):
     """ Holt die Appointment-Daten aus Bullhorn. """
-    rest_url = REST_URL if REST_URL.endswith('/') else REST_URL + '/'
-
-    endpoint = f"{rest_url}entity/Appointment?fields=id,owner,dateAdded,dateBegin&BhRestToken={BHREST_TOKEN}"
-    print(f"🌐 Endpoint-URL: {endpoint}")  # Debug-Ausgabe zur Überprüfung
+    endpoint = f"{rest_url}entity/Appointment?fields=id,owner,dateAdded,dateBegin&BhRestToken={bhrest_token}"
+    print(f"🌐 Endpoint-URL: {endpoint}")
     response = requests.get(endpoint)
-    print(f"⚡ Response Status: {response.status_code} - {response.text}")  # Debug-Ausgabe
     response.raise_for_status()
     data = response.json().get("data", [])
     print(f"📅 {len(data)} Appointments abgerufen.")
@@ -62,8 +72,14 @@ def send_to_plecto(appointments):
             print(f"⚠️ Fehler bei Appointment {appointment['id']}: {response.text}")
 
 if __name__ == "__main__":
-    appointments = get_appointments()
+    print("🚀 Starte Synchronisierung...")
+    access_token, REFRESH_TOKEN = refresh_access_token(REFRESH_TOKEN)
+    bhrest_token, rest_url = get_bhrest_token(access_token)
+    appointments = get_appointments(bhrest_token, rest_url)
+
     if appointments:
         send_to_plecto(appointments)
     else:
         print("ℹ️ Keine neuen Appointments gefunden.")
+
+    print("✅ Prozess abgeschlossen. Synchronisierung erfolgreich.")
