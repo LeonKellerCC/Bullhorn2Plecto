@@ -28,8 +28,12 @@ def refresh_access_token(refresh_token):
 
 def get_appointments():
     """ Holt die Appointment-Daten aus Bullhorn. """
-    endpoint = f"{REST_URL}entity/Appointment?fields=id,owner,dateAdded,dateBegin&BhRestToken={BHREST_TOKEN}"
+    rest_url = REST_URL if REST_URL.endswith('/') else REST_URL + '/'
+
+    endpoint = f"{rest_url}entity/Appointment?fields=id,owner,dateAdded,dateBegin&BhRestToken={BHREST_TOKEN}"
+    print(f"🌐 Endpoint-URL: {endpoint}")  # Debug-Ausgabe zur Überprüfung
     response = requests.get(endpoint)
+    print(f"⚡ Response Status: {response.status_code} - {response.text}")  # Debug-Ausgabe
     response.raise_for_status()
     data = response.json().get("data", [])
     print(f"📅 {len(data)} Appointments abgerufen.")
