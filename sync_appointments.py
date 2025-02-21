@@ -1,6 +1,8 @@
 import os
 import requests
 import json
+from urllib.parse import quote_plus
+
 
 # Umgebungsvariablen aus GitHub Actions
 ACCESS_TOKEN = os.getenv("BULLHORN_ACCESS_TOKEN")
@@ -16,7 +18,7 @@ CORP_TOKEN = "7o3wld"
 
 def refresh_access_token(refresh_token):
     """ Holt einen neuen Access Token mit dem Refresh Token. """
-    url = f"https://auth-{OAUTH_SWIMLANE}.bullhornstaffing.com/oauth/token"
+    login_url = f"https://auth-{OAUTH_SWIMLANE}.bullhornstaffing.com/oauth/token"
     data = {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
@@ -24,7 +26,7 @@ def refresh_access_token(refresh_token):
         "client_secret": os.getenv("BULLHORN_CLIENT_SECRET")
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    response = requests.post(url, data=data, headers=headers)
+    response = requests.post(login_url, data=data, headers=headers)
     response.raise_for_status()
     tokens = response.json()
     print(f"🔄 Neuer Access Token: {tokens.get('access_token')}")
@@ -34,10 +36,12 @@ def get_bhrest_token(access_token):
     """ Holt BhRestToken und restUrl basierend auf dem Access Token. """
     login_url = (
         f"https://{REST_SWIMLANE}.bullhornstaffing.com/rest-services/{CORP_TOKEN}/login?version=*"
-        f"&access_token={access_token}"
+        f"&access_token={quote_plus(access_token)}"
     )
     print(f"🌐 Generierte Login-URL: {login_url}")  # Debug-Ausgabe
-    response = requests.post(login_url)
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    response = requests.post(login_url, headers=headers)
+    print(f"⚡ Response Status: {response.status_code} - {response.text}")  # Debug-Ausgabe
     response.raise_for_status()
     login_info = response.json()
     print("🗝️  BhRestToken:", login_info.get("BhRestToken"))
