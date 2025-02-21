@@ -2,14 +2,14 @@ name: 🔄 Sync Bullhorn Appointments to Plecto
 
 on:
   schedule:
-    - cron: '0 * * * *'  # 🕒 Läuft stündlich
-  workflow_dispatch:     # 🚀 Manuelles Ausführen möglich
+    - cron: '0 * * * *'  # Läuft stündlich
+  workflow_dispatch:     # Manuelles Ausführen möglich
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Repository auschecken
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v3
 
       - name: 🐍 Python einrichten
@@ -18,7 +18,7 @@ jobs:
           python-version: '3.10'
 
       - name: 🔧 Abhängigkeiten installieren
-        run: pip install -r requirements.txt
+        run: pip install requests
 
       - name: 🚀 Bullhorn Daten synchronisieren
         env:
@@ -27,4 +27,7 @@ jobs:
           BULLHORN_REFRESH_TOKEN: ${{ secrets.BULLHORN_REFRESH_TOKEN }}
           BULLHORN_REST_URL: ${{ secrets.BULLHORN_REST_URL }}
           PLECTO_AUTH: ${{ secrets.PLECTO_AUTH }}
+          BULLHORN_REDIRECT_URI: ${{ secrets.BULLHORN_REDIRECT_URI }}
+          OAUTH_SWIMLANE: ${{ secrets.OAUTH_SWIMLANE }}
+          REST_SWIMLANE: ${{ secrets.REST_SWIMLANE }}
         run: python sync_appointments.py
