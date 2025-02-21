@@ -3,47 +3,54 @@ import requests
 import json
 
 # Umgebungsvariablen aus GitHub Actions
-CLIENT_ID = os.getenv("BULLHORN_CLIENT_ID")
-CLIENT_SECRET = os.getenv("BULLHORN_CLIENT_SECRET")
+ACCESS_TOKEN = os.getenv("BULLHORN_ACCESS_TOKEN")
 REFRESH_TOKEN = os.getenv("BULLHORN_REFRESH_TOKEN")
+BHREST_TOKEN = os.getenv("BULLHORN_BHREST_TOKEN")
 REST_URL = os.getenv("BULLHORN_REST_URL")  # https://rest70.bullhornstaffing.com/rest-services/7o3wld/
-SWIMLANE = "ger"
-
 PLECTO_AUTH = os.getenv("PLECTO_AUTH")
+
+# Unterschiedliche Swimlanes für OAuth und REST-API
+OAUTH_SWIMLANE = "ger"
+REST_SWIMLANE = "rest70"
+CORP_TOKEN = "7o3wld"
 
 def refresh_access_token(refresh_token):
     """ Holt einen neuen Access Token mit dem Refresh Token. """
-    url = f"https://auth70.bullhornstaffing.com/oauth/token"  # 🔧 Korrektur hier
-    payload = {
+    url = f"https://auth-{OAUTH_SWIMLANE}.bullhornstaffing.com/oauth/token"
+    data = {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET
+        "client_id": os.getenv("BULLHORN_CLIENT_ID"),
+        "client_secret": os.getenv("BULLHORN_CLIENT_SECRET")
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    response = requests.post(url, data=payload, headers=headers)
+    response = requests.post(url, data=data, headers=headers)
     response.raise_for_status()
     tokens = response.json()
-    print(f"🔄 Neuer Access Token erhalten.")
+    print(f"🔄 Neuer Access Token: {tokens.get('access_token')}")
     return tokens.get("access_token"), tokens.get("refresh_token")
 
 def get_bhrest_token(access_token):
     """ Holt BhRestToken und restUrl basierend auf dem Access Token. """
     login_url = (
-        f"https://rest-{SWIMLANE}.bullhornstaffing.com/rest-services/login?version=2.0"
+        f"https://{REST_SWIMLANE}.bullhornstaffing.com/rest-services/{CORP_TOKEN}/login?version=*"
         f"&access_token={access_token}"
     )
+    print(f"🌐 Generierte Login-URL: {login_url}")  # Debug-Ausgabe
     response = requests.post(login_url)
     response.raise_for_status()
     login_info = response.json()
-    print("🗝️ BhRestToken abgerufen.")
+    print("🗝️  BhRestToken:", login_info.get("BhRestToken"))
+    print("🌐 REST URL:", login_info.get("restUrl"))
     return login_info.get("BhRestToken"), login_info.get("restUrl")
 
 def get_appointments(bhrest_token, rest_url):
     """ Holt die Appointment-Daten aus Bullhorn. """
+    rest_url = rest_url if rest_url.endswith('/') else rest_url + '/'
     endpoint = f"{rest_url}entity/Appointment?fields=id,owner,dateAdded,dateBegin&BhRestToken={bhrest_token}"
-    print(f"🌐 Endpoint-URL: {endpoint}")
+    print(f"🌐 Endpoint-URL: {endpoint}")  # Debug-Ausgabe
     response = requests.get(endpoint)
+    print(f"⚡ Response Status: {response.status_code} - {response.text}")  # Debug-Ausgabe
     response.raise_for_status()
     data = response.json().get("data", [])
     print(f"📅 {len(data)} Appointments abgerufen.")
