@@ -48,7 +48,7 @@ def get_bhresttoken_and_resturl(access_token):
     Holt BhRestToken und Rest-URL von Bullhorn anhand des Access Tokens.
     """
     login_url = f"https://rest-{OAUTH_SWIMLANE}.bullhornstaffing.com/rest-services/login?version=2.0&access_token={access_token}"
-    print(f"🌐 Abrufen von BhRestToken und Rest-URL von: {login_url}")
+    print(f"🌐 Abrufen von BhRestToken und REST URL von: {login_url}")
     response = requests.post(login_url)
     response.raise_for_status()
     login_info = response.json()
@@ -104,58 +104,61 @@ def create_plecto_datasource(plecto_email, plecto_password):
 
 def get_appointments(bhrest_token, rest_url):
     """
-    Ruft alle Appointment-Daten von Bullhorn über den Query-Endpunkt ab.
+    Ruft alle Appointment-Daten von Bullhorn über den Query-Endpunkt ab (mit Pagination).
+    Standardmäßig werden ALLE Appointments abgerufen (where_clause = "id>0").
+    
+    Falls Du zukünftig nur noch neue Appointments abrufen möchtest, 
+    kannst Du den where_clause entsprechend anpassen (z. B. mit einem Datumsfilter).
     """
     if not rest_url.endswith("/"):
         rest_url += "/"
-    where_clause = "id>0"
+    all_appointments = []
     start = 0
-    count = 100  # Anzahl der Datensätze pro Anfrage (ggf. paginieren, wenn mehr benötigt werden)
-    endpoint = (f"{rest_url}query/Appointment?BhRestToken={bhrest_token}"
-                f"&fields=id,owner,dateAdded,dateBegin"
-                f"&where={where_clause}&start={start}&count={count}")
-    print(f"📅 Abfrage-Endpunkt-URL: {endpoint}")
-    headers = {"Accept": "application/json"}
-    response = requests.get(endpoint, headers=headers)
-    print("===== DEBUG: APPOINTMENT RESPONSE =====")
-    print("Status Code =", response.status_code)
-    print("Response Text =", response.text)
-    print("=======================================\n")
-    response.raise_for_status()
-    appointments = response.json()
-    print("✅ Abgerufene Appointment-Daten:", appointments)
-    return appointments
+    count = 100  # Anzahl der Datensätze pro Anfrage
+    where_clause = "id>0"  # Hier ggf. anpassen, um nur neue Einträge abzurufen.
+    
+    while True:
+        endpoint = (f"{rest_url}query/Appointment?BhRestToken={bhrest_token}"
+                    f"&fields=id,owner,dateAdded,dateBegin"
+                    f"&where={where_clause}&start={start}&count={count}")
+        print(f"📅 Abrufe Appointments (Start: {start})")
+        headers = {"Accept": "application/json"}
+        response = requests.get(endpoint, headers=headers)
+        if response.status_code != 200:
+            print(f"❌ Fehler beim Abrufen der Appointments: {response.status_code}")
+            print(response.text)
+            break
+        data = response.json()
+        appointments = data.get("data", [])
+        if not appointments:
+            print("✅ Keine weiteren Appointments gefunden.")
+            break
+        all_appointments.extend(appointments)
+        start += count
+    print(f"✅ Insgesamt {len(all_appointments)} Appointments abgerufen.")
+    # Um die Kompatibilität mit dem bisherigen Code zu wahren, verpacken wir die Liste in ein Dict.
+    return {"data": all_appointments}
 
 
-def send_registrations_to_plecto(appointments, data_source_uuid, plecto_email, plecto_password):
+def send_registrations_to_plecto(appointments_dict, data_source_uuid, plecto_email, plecto_password):
     """
     Transformiert die Bullhorn-Appointment-Daten in Registrierungen für Plecto und
-    sendet diese als Bulk-Request an den Endpoint:
-    https://app.plecto.com/api/v2/registrations/
+    sendet diese als Bulk-Request an den Endpoint: https://app.plecto.com/api/v2/registrations/
     
-    Für jede Registrierung sind folgende Pflichtfelder enthalten:
-      - data_source: Die UUID der Plecto Data Source
-      - member_api_provider: Hier "Bullhorn" (als Beispiel)
-      - member_api_id: Die Owner-ID (als String)
-      - member_name: Zusammengesetzt aus firstName und lastName
-      - external_id: Hier die Appointment-ID (als String)
-      
-    Zusätzlich werden die Felder "date_added" und "date_begin" im ISO8601-Format übermittelt.
+    Die Daten werden in Batches von je 100 Einträgen gesendet.
     """
+    appointments = appointments_dict.get("data", [])
     registrations = []
-    for appointment in appointments.get("data", []):
+    url = "https://app.plecto.com/api/v2/registrations/"
+    auth = (plecto_email, plecto_password)
+    headers = {"Content-Type": "application/json"}
+    
+    for appointment in appointments:
         owner = appointment.get("owner", {})
-        # Konvertiere die Zeitstempel (in ms) in ISO8601 mit Zeitzonenoffset
         date_added_ms = appointment.get("dateAdded")
         date_begin_ms = appointment.get("dateBegin")
-        if date_added_ms:
-            date_added_iso = datetime.datetime.fromtimestamp(date_added_ms / 1000, datetime.timezone.utc).isoformat()
-        else:
-            date_added_iso = None
-        if date_begin_ms:
-            date_begin_iso = datetime.datetime.fromtimestamp(date_begin_ms / 1000, datetime.timezone.utc).isoformat()
-        else:
-            date_begin_iso = None
+        date_added_iso = datetime.datetime.fromtimestamp(date_added_ms / 1000, datetime.timezone.utc).isoformat() if date_added_ms else None
+        date_begin_iso = datetime.datetime.fromtimestamp(date_begin_ms / 1000, datetime.timezone.utc).isoformat() if date_begin_ms else None
 
         registration = {
             "data_source": data_source_uuid,
@@ -163,22 +166,25 @@ def send_registrations_to_plecto(appointments, data_source_uuid, plecto_email, p
             "member_api_id": str(owner.get("id")),
             "member_name": f"{owner.get('firstName', '')} {owner.get('lastName', '')}".strip(),
             "external_id": str(appointment.get("id")),
-            # Optionale Felder, die in der Data Source definiert sind:
             "appointment_id": str(appointment.get("id")),
             "date_added": date_added_iso,
             "date_begin": date_begin_iso
         }
         registrations.append(registration)
+        
+        if len(registrations) == 100:
+            print("📤 Sende 100 Registrierungen an Plecto...")
+            response = requests.post(url, auth=auth, headers=headers, data=json.dumps(registrations))
+            response.raise_for_status()
+            print("✅ 100 Registrierungen erfolgreich gesendet.")
+            registrations = []
     
-    # Bulk-Registrierungen (bis zu 100 pro Request)
-    url = "https://app.plecto.com/api/v2/registrations/"
-    auth = (plecto_email, plecto_password)
-    headers = {"Content-Type": "application/json"}
-    print("📤 Sende Registrierungen an Plecto...")
-    response = requests.post(url, auth=auth, headers=headers, data=json.dumps(registrations))
-    response.raise_for_status()
-    print("✅ Registrierungen erfolgreich an Plecto gesendet!")
-    print("Plecto Antwort:", response.text)
+    # Restliche Registrierungen senden
+    if registrations:
+        print(f"📤 Sende letzte {len(registrations)} Registrierungen an Plecto...")
+        response = requests.post(url, auth=auth, headers=headers, data=json.dumps(registrations))
+        response.raise_for_status()
+        print("✅ Letzte Registrierungen erfolgreich gesendet.")
 
 
 def main():
@@ -187,8 +193,7 @@ def main():
     if DATA_SOURCE_UUID is None:
         DATA_SOURCE_UUID = create_plecto_datasource(PLECTO_EMAIL, PLECTO_PASSWORD)
         if DATA_SOURCE_UUID is None:
-            # Falls das Erstellen fehlschlägt (z. B. weil sie schon existiert),
-            # kannst Du hier alternativ die vorhandene UUID eintragen.
+            # Falls das Erstellen fehlschlägt, kannst Du hier alternativ die vorhandene UUID eintragen.
             DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"
     
     # Bullhorn: Refresh Token abrufen (aus dem Key Vault oder Umgebungsvariablen)
@@ -259,6 +264,7 @@ def main():
     
     # Sende die Bullhorn-Daten als Registrierungen an Plecto
     send_registrations_to_plecto(appointments, DATA_SOURCE_UUID, PLECTO_EMAIL, PLECTO_PASSWORD)
+
 
 if __name__ == "__main__":
     try:
