@@ -31,7 +31,7 @@ jobs:
           PLECTO_EMAIL: ${{ secrets.PLECTO_EMAIL }}
           PLECTO_PASSWORD: ${{ secrets.PLECTO_PASSWORD }}
           DATA_SOURCE_UUID: ${{ secrets.DATA_SOURCE_UUID }}
-          KEY_VAULT_URL: ${{ secrets.KEY_VAULT_URL }}          # <-- Neu hinzufügen
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}  # <-- Neu hinzufügen
-  run: |
-    python main.py
+          KEY_VAULT_URL: ${{ secrets.KEY_VAULT_URL }}
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+        run: |
+          python main.py
