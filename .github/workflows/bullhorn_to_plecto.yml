@@ -33,5 +33,8 @@ jobs:
           DATA_SOURCE_UUID: ${{ secrets.DATA_SOURCE_UUID }}
           KEY_VAULT_URL: ${{ secrets.KEY_VAULT_URL }}
           AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: |
           python main.py
