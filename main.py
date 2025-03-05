@@ -17,7 +17,9 @@ MANUAL_FALLBACK_REFRESH_TOKEN = "21535_8083665_70:a97f4dfa-ecf1-4b15-8297-8071d1
 # ===============================
 # Azure Key Vault (zur Token-Verwaltung)
 # ===============================
-KV_URL = "https://bullhornvault.vault.azure.net/"
+KV_URL = os.environ.get("KEY_VAULT_URL")
+if not KV_URL:
+    print("⚠️  KEY_VAULT_URL nicht gesetzt. Bitte setze die Umgebungsvariable!")
 AZURE_CREDENTIALS = os.environ.get("AZURE_CREDENTIALS")
 if not AZURE_CREDENTIALS:
     print("⚠️  AZURE_CREDENTIALS nicht gefunden. Stelle sicher, dass sie in den Umgebungsvariablen gesetzt sind.")
