@@ -17,7 +17,10 @@ MANUAL_FALLBACK_REFRESH_TOKEN = "21535_8083665_70:a97f4dfa-ecf1-4b15-8297-8071d1
 # ===============================
 # Azure Key Vault (zur Token-Verwaltung)
 # ===============================
-KV_URL = "https://bullhornvault.vault.azure.net/"
+AZURE_CREDENTIALS = os.environ.get("AZURE_CREDENTIALS")
+if not AZURE_CREDENTIALS:
+    print("⚠️  AZURE_CREDENTIALS nicht gefunden. Stelle sicher, dass sie in den Umgebungsvariablen gesetzt sind.")
+
 credential = DefaultAzureCredential()
 secret_client = SecretClient(vault_url=KV_URL, credential=credential)
 
