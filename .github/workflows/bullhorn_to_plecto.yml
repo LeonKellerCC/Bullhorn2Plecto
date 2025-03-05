@@ -30,8 +30,8 @@ jobs:
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           PLECTO_EMAIL: ${{ secrets.PLECTO_EMAIL }}
           PLECTO_PASSWORD: ${{ secrets.PLECTO_PASSWORD }}
-          # Optional: Falls Du die Data Source UUID bereits hast, kannst Du sie hier ebenfalls als Secret übergeben.
           DATA_SOURCE_UUID: ${{ secrets.DATA_SOURCE_UUID }}
-          # Weitere Secrets wie Bullhorn Refresh Token können ebenfalls hinzugefügt werden.
-        run: |
-          python main.py
+          KEY_VAULT_URL: ${{ secrets.KEY_VAULT_URL }}          # <-- Neu hinzufügen
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}  # <-- Neu hinzufügen
+  run: |
+    python main.py
