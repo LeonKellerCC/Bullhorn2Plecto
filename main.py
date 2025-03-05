@@ -12,7 +12,7 @@ CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 REDIRECT_URI = "https://welcome.bullhornstaffing.com"
 OAUTH_SWIMLANE = "ger"
-MANUAL_FALLBACK_REFRESH_TOKEN = "21535_8083665_70:80f09780-16fe-49df-9a48-3b47a98b7525"
+MANUAL_FALLBACK_REFRESH_TOKEN = "21535_8083665_70:a859fa15-b40b-4ab4-a4a1-3cd555ca962e"
 
 # ===============================
 # Azure Key Vault (zur Token-Verwaltung)
