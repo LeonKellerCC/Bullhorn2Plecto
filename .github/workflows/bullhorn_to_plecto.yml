@@ -2,8 +2,8 @@ name: Run Bullhorn-Plecto Integration
 
 on:
   schedule:
-    # Führt den Workflow alle 45 Minuten von 7 bis 22 Uhr UTC aus.
-    - cron: "*/45 7-22 * * *"
+    # Führt den Workflow Werktags alle 30 Minuten von 7 bis 22 Uhr UTC aus.
+    - cron: "*/20 7-21 * * 1-5"
   workflow_dispatch:
 
 jobs:
