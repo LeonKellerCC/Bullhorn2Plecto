@@ -121,7 +121,7 @@ def get_meeting_notes(bhrest_token, rest_url):
     
     while True:
         params = {
-            "query": 'action:"Meeting"',  # Filter: nur Meeting-Notes
+            "query": 'action:"Kundenbesuch"',  # Filter: nur Meeting-Notes
             "fields": "id,action,dateAdded,commentingPerson(id,firstName,lastName)",
             "start": start,
             "count": count,
