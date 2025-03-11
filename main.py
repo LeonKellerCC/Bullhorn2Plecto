@@ -97,21 +97,22 @@ def create_plecto_datasource(plecto_email, plecto_password):
 
 def get_meeting_notes(bhrest_token, rest_url):
     """
-    Ruft alle Notes ab, bei denen action='Meeting' gesetzt ist (mit Pagination).
+    Ruft alle Notes ab, bei denen action='Meeting' gesetzt ist, über den /search-Endpunkt (mit Pagination).
     """
     if not rest_url.endswith("/"):
         rest_url += "/"
     all_notes = []
     start = 0
     count = 100
-    where_clause = "action='Meeting'"
+    # Für den Search-Call wird die Suchabfrage als "query" übergeben.
+    # Hier verwenden wir Lucene-Syntax: action:"Meeting"
+    query_clause = "action:\"Meeting\""
     
     while True:
         endpoint = (
-            f"{rest_url}query/Note"
-            f"?BhRestToken={bhrest_token}"
-            f"&fields=id,owner(id,firstName,lastName),dateAdded"  # <-- 'comments' entfernt
-            f"&where={where_clause}&start={start}&count={count}"
+            f"{rest_url}search/Note?BhRestToken={bhrest_token}"
+            f"&fields=id,owner(id,firstName,lastName),dateAdded"
+            f"&query={query_clause}&start={start}&count={count}"
         )
         print(f"📅 Abrufe Meeting-Notes (Start: {start})")
         headers = {"Accept": "application/json"}
@@ -137,7 +138,6 @@ def get_meeting_notes(bhrest_token, rest_url):
         json.dump({"data": all_notes}, f, indent=4)
     
     return {"data": all_notes}
-
 
 def send_meeting_notes_to_plecto(notes_dict, data_source_uuid, plecto_email, plecto_password):
     """
