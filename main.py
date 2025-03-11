@@ -29,7 +29,6 @@ secret_client = SecretClient(vault_url=KV_URL, credential=credential)
 
 # ===============================
 # Plecto-Konfiguration (Basic Auth)
-# Erstelle in Plecto einen dedizierten Benutzer für die Integration!
 # ===============================
 PLECTO_EMAIL = os.environ.get("PLECTO_EMAIL")
 PLECTO_PASSWORD = os.environ.get("PLECTO_PASSWORD")
@@ -37,8 +36,7 @@ PLECTO_PASSWORD = os.environ.get("PLECTO_PASSWORD")
 # Falls Du schon eine Data Source in Plecto erstellt hast,
 # kannst Du hier deren UUID eintragen. Ansonsten wird versucht,
 # eine neue Data Source anzulegen.
-DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"  # z. B. "70a0d1kg780a4cd98f541c214601030e"
-
+DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"
 
 # ===============================
 # Funktionen
@@ -70,21 +68,16 @@ def create_plecto_datasource(plecto_email, plecto_password):
     auth = (plecto_email, plecto_password)
     headers = {"Content-Type": "application/json"}
     payload = {
-        "title": "My Bullhorn Appointments",
+        "title": "My Bullhorn Meetings",
         "fields": [
             {
-                "name": "appointment_id",
+                "name": "note_id",
                 "input": "TextInput",
                 "default_value": ""
             },
             {
                 "name": "date_added",
-                "input": "TextInput",  # Statt DateTimeInput
-                "default_value": ""
-            },
-            {
-                "name": "date_begin",
-                "input": "TextInput",  # Statt DateTimeInput
+                "input": "TextInput",
                 "default_value": ""
             }
         ]
@@ -102,75 +95,79 @@ def create_plecto_datasource(plecto_email, plecto_password):
         return None
 
 
-def get_appointments(bhrest_token, rest_url):
+def get_meeting_notes(bhrest_token, rest_url):
     """
-    Ruft alle Appointment-Daten von Bullhorn über den Query-Endpunkt ab (mit Pagination).
-    Standardmäßig werden ALLE Appointments abgerufen (where_clause = "id>0").
-    
-    Falls Du zukünftig nur noch neue Appointments abrufen möchtest, 
-    kannst Du den where_clause entsprechend anpassen (z. B. mit einem Datumsfilter).
+    Ruft alle Notes ab, bei denen action='Meeting' gesetzt ist (mit Pagination).
     """
     if not rest_url.endswith("/"):
         rest_url += "/"
-    all_appointments = []
+    all_notes = []
     start = 0
-    count = 100  # Anzahl der Datensätze pro Anfrage
-    where_clause = "id>0"  # Hier ggf. anpassen, um nur neue Einträge abzurufen.
+    count = 100
+    where_clause = "action='Meeting'"
     
     while True:
-        endpoint = (f"{rest_url}query/Appointment?BhRestToken={bhrest_token}"
-                    f"&fields=id,owner,dateAdded,dateBegin"
-                    f"&where={where_clause}&start={start}&count={count}")
-        print(f"📅 Abrufe Appointments (Start: {start})")
+        endpoint = (
+            f"{rest_url}query/Note"
+            f"?BhRestToken={bhrest_token}"
+            f"&fields=id,owner(id,firstName,lastName),dateAdded"  # <-- 'comments' entfernt
+            f"&where={where_clause}&start={start}&count={count}"
+        )
+        print(f"📅 Abrufe Meeting-Notes (Start: {start})")
         headers = {"Accept": "application/json"}
         response = requests.get(endpoint, headers=headers)
         if response.status_code != 200:
-            print(f"❌ Fehler beim Abrufen der Appointments: {response.status_code}")
+            print(f"❌ Fehler beim Abrufen der Notes: {response.status_code}")
             print(response.text)
             break
+        
         data = response.json()
-        appointments = data.get("data", [])
-        if not appointments:
-            print("✅ Keine weiteren Appointments gefunden.")
+        notes = data.get("data", [])
+        if not notes:
+            print("✅ Keine weiteren Meeting-Notes gefunden.")
             break
-        all_appointments.extend(appointments)
+        
+        all_notes.extend(notes)
         start += count
-    print(f"✅ Insgesamt {len(all_appointments)} Appointments abgerufen.")
     
-    # Um die Kompatibilität mit dem bisherigen Code zu wahren, verpacken wir die Liste in ein Dict.
-    return {"data": all_appointments}
+    print(f"✅ Insgesamt {len(all_notes)} Meeting-Notes abgerufen.")
+    
+    # Speichern als Debug-Datei (optional)
+    with open("debug_meeting_notes.json", "w", encoding="utf-8") as f:
+        json.dump({"data": all_notes}, f, indent=4)
+    
+    return {"data": all_notes}
 
 
-def send_registrations_to_plecto(appointments_dict, data_source_uuid, plecto_email, plecto_password):
+def send_meeting_notes_to_plecto(notes_dict, data_source_uuid, plecto_email, plecto_password):
     """
-    Transformiert die Bullhorn-Appointment-Daten in Registrierungen für Plecto und
-    sendet diese als Bulk-Request an den Endpoint: https://app.plecto.com/api/v2/registrations/
-    
-    Die Daten werden in Batches von je 100 Einträgen gesendet.
+    Transformiert die Meeting-Notes in Registrierungen für Plecto
+    und sendet diese als Bulk-Request an: https://app.plecto.com/api/v2/registrations/
     """
-    appointments = appointments_dict.get("data", [])
+    notes = notes_dict.get("data", [])
     registrations = []
     url = "https://app.plecto.com/api/v2/registrations/"
     auth = (plecto_email, plecto_password)
     headers = {"Content-Type": "application/json"}
     
-    for appointment in appointments:
-        owner = appointment.get("owner", {})
-        date_added_ms = appointment.get("dateAdded")
-        date_begin_ms = appointment.get("dateBegin")
-        date_added_iso = datetime.datetime.fromtimestamp(date_added_ms / 1000, datetime.timezone.utc).isoformat() if date_added_ms else None
-        date_begin_iso = datetime.datetime.fromtimestamp(date_begin_ms / 1000, datetime.timezone.utc).isoformat() if date_begin_ms else None
-
+    for note in notes:
+        owner = note.get("owner", {})
+        date_added_ms = note.get("dateAdded")
+        date_added_iso = None
+        
+        if date_added_ms:
+            date_added_iso = datetime.datetime.fromtimestamp(date_added_ms / 1000, datetime.timezone.utc).isoformat()
+        
         registration = {
             "data_source": data_source_uuid,
             "member_api_provider": "Bullhorn",
             "member_api_id": str(owner.get("id")),
             "member_name": f"{owner.get('firstName', '')} {owner.get('lastName', '')}".strip(),
-            "external_id": str(appointment.get("id")),
-            "appointment_id": str(appointment.get("id")),
-            "date_added": date_added_iso,
-            "date_begin": date_begin_iso
+            "external_id": str(note.get("id")),
+            "note_id": str(note.get("id")),
+            "date_added": date_added_iso
         }
+        
         registrations.append(registration)
         
         if len(registrations) == 100:
@@ -180,7 +177,6 @@ def send_registrations_to_plecto(appointments_dict, data_source_uuid, plecto_ema
             print("✅ 100 Registrierungen erfolgreich gesendet.")
             registrations = []
     
-    # Restliche Registrierungen senden
     if registrations:
         print(f"📤 Sende letzte {len(registrations)} Registrierungen an Plecto...")
         response = requests.post(url, auth=auth, headers=headers, data=json.dumps(registrations))
@@ -189,15 +185,12 @@ def send_registrations_to_plecto(appointments_dict, data_source_uuid, plecto_ema
 
 
 def main():
-    # Optional: Erstelle in Plecto eine neue Data Source, falls noch nicht vorhanden.
     global DATA_SOURCE_UUID
     if DATA_SOURCE_UUID is None:
         DATA_SOURCE_UUID = create_plecto_datasource(PLECTO_EMAIL, PLECTO_PASSWORD)
         if DATA_SOURCE_UUID is None:
-            # Falls das Erstellen fehlschlägt, kannst Du hier alternativ die vorhandene UUID eintragen.
             DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"
     
-    # Bullhorn: Refresh Token abrufen (aus dem Key Vault oder Umgebungsvariablen)
     try:
         refresh_token_secret = secret_client.get_secret("BullhornRefreshToken")
         REFRESH_TOKEN = refresh_token_secret.value
@@ -218,7 +211,6 @@ def main():
     print("OAUTH_SWIMLANE =", OAUTH_SWIMLANE)
     print("======================================\n")
     
-    # Bullhorn: POST-Anfrage zum Abrufen des Access Tokens
     token_url = f"https://auth-{OAUTH_SWIMLANE}.bullhornstaffing.com/oauth/token"
     data = {
         "grant_type": "refresh_token",
@@ -261,16 +253,16 @@ def main():
     print("💾 Refresh Token erfolgreich im Key Vault gespeichert.")
     
     bhrest_token, rest_url = get_bhresttoken_and_resturl(new_access_token)
-    appointments = get_appointments(bhrest_token, rest_url)
     
-    # Sende die Bullhorn-Daten als Registrierungen an Plecto
-    send_registrations_to_plecto(appointments, DATA_SOURCE_UUID, PLECTO_EMAIL, PLECTO_PASSWORD)
+    notes_dict = get_meeting_notes(bhrest_token, rest_url)
+    
+    send_meeting_notes_to_plecto(notes_dict, DATA_SOURCE_UUID, PLECTO_EMAIL, PLECTO_PASSWORD)
 
 
 if __name__ == "__main__":
     try:
         main()
-        print("🎉 Prozess abgeschlossen. Bullhorn-Appointments wurden abgerufen, die Data Source erstellt und Registrierungen an Plecto gesendet.")
+        print("🎉 Prozess abgeschlossen. Meeting-Notes wurden abgerufen, die Data Source erstellt und Registrierungen an Plecto gesendet.")
     except requests.exceptions.HTTPError as http_err:
         print(f"❌ HTTPError: {str(http_err)}")
     except Exception as e:
