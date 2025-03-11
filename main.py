@@ -29,17 +29,22 @@ secret_client = SecretClient(vault_url=KV_URL, credential=credential)
 
 # ===============================
 # Plecto-Konfiguration (Basic Auth)
+# Erstelle in Plecto einen dedizierten Benutzer für die Integration!
 # ===============================
 PLECTO_EMAIL = os.environ.get("PLECTO_EMAIL")
 PLECTO_PASSWORD = os.environ.get("PLECTO_PASSWORD")
 
-# Falls bereits eine Data Source in Plecto existiert, hier deren UUID eintragen.
-DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"
+# Falls Du schon eine Data Source in Plecto erstellt hast,
+# kannst Du hier deren UUID eintragen. Ansonsten wird versucht,
+# eine neue Data Source anzulegen.
+DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"  # z. B. "70a0d1kg780a4cd98f541c214601030e"
 
-
+# ===============================
+# Funktionen
+# ===============================
 def get_bhresttoken_and_resturl(access_token):
     """
-    Holt BhRestToken und REST URL von Bullhorn anhand des Access Tokens.
+    Holt BhRestToken und REST-URL von Bullhorn anhand des Access Tokens.
     """
     login_url = f"https://rest-{OAUTH_SWIMLANE}.bullhornstaffing.com/rest-services/login?version=2.0&access_token={access_token}"
     print(f"🌐 Abrufen von BhRestToken und REST URL von: {login_url}")
@@ -53,51 +58,151 @@ def get_bhresttoken_and_resturl(access_token):
     return bhrest_token, rest_url
 
 
-def debug_actions_table(bhrest_token, rest_url):
+def create_plecto_datasource(plecto_email, plecto_password):
     """
-    Ruft die letzten 500 Notizen (unabhängig von action) ab, sortiert nach id absteigend,
-    und gibt eine Übersicht der verschiedenen action-Felder samt deren Häufigkeit in einer Tabelle aus.
+    Erstellt eine neue API Data Source in Plecto über Basic Authentication.
+    Das Payload enthält einen Titel und eine Liste von Feldern.
+    """
+    url = "https://app.plecto.com/api/v2/datasources/"
+    auth = (plecto_email, plecto_password)
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "title": "My Bullhorn Meeting Notes",
+        "fields": [
+            {
+                "name": "note_id",
+                "input": "TextInput",
+                "default_value": ""
+            },
+            {
+                "name": "date_added",
+                "input": "TextInput",  # Wir verwenden hier den Timestamp aus dateAdded
+                "default_value": ""
+            },
+            {
+                "name": "action",
+                "input": "TextInput",
+                "default_value": ""
+            },
+            {
+                "name": "commenting_person",
+                "input": "TextInput",
+                "default_value": ""
+            }
+        ]
+    }
+    print("📤 Erstelle Plecto Data Source...")
+    response = requests.post(url, auth=auth, headers=headers, data=json.dumps(payload))
+    if response.status_code == 201:
+        ds = response.json()
+        print("✅ Data Source erfolgreich erstellt!")
+        print("Antwort:", ds)
+        return ds.get("id")
+    else:
+        print("❌ Fehler beim Erstellen der Data Source:")
+        print(response.status_code, response.text)
+        return None
+
+
+def get_meeting_notes(bhrest_token, rest_url):
+    """
+    Ruft alle Meeting-Notes von Bullhorn ab.
+    Dabei wird der Search-Endpunkt verwendet und es werden nur Notes mit
+    action="Meeting" berücksichtigt.
     """
     if not rest_url.endswith("/"):
         rest_url += "/"
-    query_clause = "*:*"  # Alle Notizen abrufen
-    # Sortierung nach id als Ersatz für dateAdded (angenommen, höhere id = neuer)
-    endpoint = (
-        f"{rest_url}search/Note?BhRestToken={bhrest_token}"
-        f"&fields=id,action,dateAdded"
-        f"&query={query_clause}&sort=id%3Adesc&start=0&count=500"
-    )
-    print("📅 Abrufe die letzten 500 Notizen...")
-    headers = {"Accept": "application/json"}
-    response = requests.get(endpoint, headers=headers)
-    response.raise_for_status()
-    data = response.json()
-    notes = data.get("data", [])
-    print(f"✅ Insgesamt {len(notes)} Notizen abgerufen.")
+    all_notes = []
+    start = 0
+    count = 100  # Anzahl der Datensätze pro Anfrage
+
+    # Verwende den Search-Endpunkt für Notes
+    endpoint = f"{rest_url}search/Note"
     
-    # Zähle die verschiedenen action-Werte
-    action_counter = {}
+    while True:
+        params = {
+            "query": 'action:"Meeting"',  # Filter: nur Meeting-Notes
+            "fields": "id,action,dateAdded,commentingPerson(id,firstName,lastName)",
+            "start": start,
+            "count": count,
+            "BhRestToken": bhrest_token
+        }
+        print(f"📅 Abrufe Meeting-Notes (Start: {start})")
+        headers = {"Accept": "application/json"}
+        response = requests.get(endpoint, headers=headers, params=params)
+        if response.status_code != 200:
+            print(f"❌ Fehler beim Abrufen der Notes: {response.status_code}")
+            print(response.text)
+            break
+        data = response.json()
+        notes = data.get("data", [])
+        if not notes:
+            print("✅ Keine weiteren Meeting-Notes gefunden.")
+            break
+        all_notes.extend(notes)
+        start += count
+    print(f"✅ Insgesamt {len(all_notes)} Meeting-Notes abgerufen.")
+    
+    # Um die Kompatibilität mit dem bisherigen Code zu wahren, verpacken wir die Liste in ein Dict.
+    return {"data": all_notes}
+
+
+def send_registrations_to_plecto(notes_dict, data_source_uuid, plecto_email, plecto_password):
+    """
+    Transformiert die Bullhorn-Meeting-Note-Daten in Registrierungen für Plecto und
+    sendet diese als Bulk-Request an den Endpoint: https://app.plecto.com/api/v2/registrations/
+    Die Daten werden in Batches von je 100 Einträgen gesendet.
+    """
+    notes = notes_dict.get("data", [])
+    registrations = []
+    url = "https://app.plecto.com/api/v2/registrations/"
+    auth = (plecto_email, plecto_password)
+    headers = {"Content-Type": "application/json"}
+    
     for note in notes:
-        action = note.get("action")
-        if action is None:
-            action = "None"
-        action_counter[action] = action_counter.get(action, 0) + 1
+        # Anstatt 'owner' verwenden wir 'commentingPerson'
+        commenter = note.get("commentingPerson", {})
+        date_added_ms = note.get("dateAdded")
+        date_added_iso = datetime.datetime.fromtimestamp(date_added_ms / 1000, datetime.timezone.utc).isoformat() if date_added_ms else None
+
+        registration = {
+            "data_source": data_source_uuid,
+            "member_api_provider": "Bullhorn",
+            "member_api_id": str(commenter.get("id")),
+            "member_name": f"{commenter.get('firstName', '')} {commenter.get('lastName', '')}".strip(),
+            "external_id": str(note.get("id")),
+            "note_id": str(note.get("id")),
+            "date_added": date_added_iso,
+            "action": note.get("action")
+        }
+        registrations.append(registration)
+        
+        if len(registrations) == 100:
+            print("📤 Sende 100 Registrierungen an Plecto...")
+            response = requests.post(url, auth=auth, headers=headers, data=json.dumps(registrations))
+            response.raise_for_status()
+            print("✅ 100 Registrierungen erfolgreich gesendet.")
+            registrations = []
     
-    print("\n--- Übersicht der action-Felder (letzte 500 Notizen) ---")
-    print("{:<40} {:<10}".format("Action", "Count"))
-    print("-" * 50)
-    for act, cnt in sorted(action_counter.items()):
-        print("{:<40} {:<10}".format(act, cnt))
-    
-    # Speichere die Debug-Daten in einer JSON-Datei
-    with open("debug_meetings.json", "w", encoding="utf-8") as f:
-        json.dump({"data": notes}, f, indent=4)
-    print("\n📝 Debug-Datei 'debug_meetings.json' wurde erstellt.")
+    # Restliche Registrierungen senden
+    if registrations:
+        print(f"📤 Sende letzte {len(registrations)} Registrierungen an Plecto...")
+        response = requests.post(url, auth=auth, headers=headers, data=json.dumps(registrations))
+        response.raise_for_status()
+        print("✅ Letzte Registrierungen erfolgreich gesendet.")
 
 
 def main():
+    # Optional: Erstelle in Plecto eine neue Data Source, falls noch nicht vorhanden.
+    global DATA_SOURCE_UUID
+    if DATA_SOURCE_UUID is None:
+        DATA_SOURCE_UUID = create_plecto_datasource(PLECTO_EMAIL, PLECTO_PASSWORD)
+        if DATA_SOURCE_UUID is None:
+            # Falls das Erstellen fehlschlägt, kannst Du hier alternativ die vorhandene UUID eintragen.
+            DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"
+    
+    # Bullhorn: Refresh Token abrufen (aus dem Key Vault oder Umgebungsvariablen)
     try:
-        # Bullhorn: Refresh Token abrufen
         refresh_token_secret = secret_client.get_secret("BullhornRefreshToken")
         REFRESH_TOKEN = refresh_token_secret.value
         print("🔑 Refresh Token erfolgreich aus dem Key Vault geladen.")
@@ -117,7 +222,7 @@ def main():
     print("OAUTH_SWIMLANE =", OAUTH_SWIMLANE)
     print("======================================\n")
     
-    # Bullhorn: Access Token abrufen
+    # Bullhorn: POST-Anfrage zum Abrufen des Access Tokens
     token_url = f"https://auth-{OAUTH_SWIMLANE}.bullhornstaffing.com/oauth/token"
     data = {
         "grant_type": "refresh_token",
@@ -160,15 +265,16 @@ def main():
     print("💾 Refresh Token erfolgreich im Key Vault gespeichert.")
     
     bhrest_token, rest_url = get_bhresttoken_and_resturl(new_access_token)
+    notes = get_meeting_notes(bhrest_token, rest_url)
     
-    # Abrufe die letzten 500 Notizen und erstelle eine Übersicht der action-Felder
-    debug_actions_table(bhrest_token, rest_url)
+    # Sende die Bullhorn-Daten als Registrierungen an Plecto
+    send_registrations_to_plecto(notes, DATA_SOURCE_UUID, PLECTO_EMAIL, PLECTO_PASSWORD)
 
 
 if __name__ == "__main__":
     try:
         main()
-        print("🎉 Debug-Prozess abgeschlossen.")
+        print("🎉 Prozess abgeschlossen. Bullhorn-Meeting-Notes wurden abgerufen, die Data Source erstellt und Registrierungen an Plecto gesendet.")
     except requests.exceptions.HTTPError as http_err:
         print(f"❌ HTTPError: {str(http_err)}")
     except Exception as e:
