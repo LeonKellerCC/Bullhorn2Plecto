@@ -254,4 +254,26 @@ def main():
     new_refresh_token = tokens.get("refresh_token")
     
     print("✅ Neuer Access Token:", new_access_token)
-    print("🔄
+    print("🔄 Neuer Refresh Token:", new_refresh_token)
+    print("📅 expires_in:", tokens.get("expires_in"))
+    
+    secret_client.set_secret("BullhornRefreshToken", new_refresh_token)
+    print("💾 Refresh Token erfolgreich im Key Vault gespeichert.")
+    
+    bhrest_token, rest_url = get_bhresttoken_and_resturl(new_access_token)
+    
+    # Abrufen der Meetings (Notes mit action="Meeting")
+    meetings_dict = get_meetings(bhrest_token, rest_url)
+    
+    # Sende die Meetings an Plecto
+    send_meetings_to_plecto(meetings_dict, DATA_SOURCE_UUID, PLECTO_EMAIL, PLECTO_PASSWORD)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+        print("🎉 Prozess abgeschlossen. Meetings wurden abgerufen, die Data Source erstellt und Registrierungen an Plecto gesendet.")
+    except requests.exceptions.HTTPError as http_err:
+        print(f"❌ HTTPError: {str(http_err)}")
+    except Exception as e:
+        print(f"❌ Fehler: {e}")
