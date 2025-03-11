@@ -56,16 +56,16 @@ def get_bhresttoken_and_resturl(access_token):
 def debug_actions_table(bhrest_token, rest_url):
     """
     Ruft die letzten 500 Notizen (unabhängig von action) ab, sortiert nach dateAdded absteigend,
-    und gibt eine Übersicht der verschiedenen action-Werte samt deren Häufigkeit in einer Tabelle aus.
+    und gibt eine Übersicht der verschiedenen action-Felder samt deren Häufigkeit in einer Tabelle aus.
     """
     if not rest_url.endswith("/"):
         rest_url += "/"
-    query_clause = "*:*"  # Alle Notizen
-    # Sortierung: Die neuesten Notizen zuerst (descending nach dateAdded)
+    query_clause = "*:*"  # Alle Notizen abrufen
+    # URL-kodierter Sortierparameter: "dateAdded:desc" -> "dateAdded%3Adesc"
     endpoint = (
         f"{rest_url}search/Note?BhRestToken={bhrest_token}"
         f"&fields=id,action,dateAdded"
-        f"&query={query_clause}&sort=dateAdded:desc&start=0&count=500"
+        f"&query={query_clause}&sort=dateAdded%3Adesc&start=0&count=500"
     )
     print("📅 Abrufe die letzten 500 Notizen...")
     headers = {"Accept": "application/json"}
@@ -75,19 +75,19 @@ def debug_actions_table(bhrest_token, rest_url):
     notes = data.get("data", [])
     print(f"✅ Insgesamt {len(notes)} Notizen abgerufen.")
     
-    # Erstelle eine Übersicht der verschiedenen action-Werte
+    # Zähle die Vorkommen der verschiedenen action-Werte
     action_counter = {}
     for note in notes:
         action = note.get("action")
         if action is None:
             action = "None"
         action_counter[action] = action_counter.get(action, 0) + 1
-
+    
     print("\n--- Übersicht der action-Felder (letzte 500 Notizen) ---")
-    print("{:<30} {:<10}".format("Action", "Count"))
-    print("-" * 40)
+    print("{:<40} {:<10}".format("Action", "Count"))
+    print("-" * 50)
     for act, cnt in sorted(action_counter.items()):
-        print("{:<30} {:<10}".format(act, cnt))
+        print("{:<40} {:<10}".format(act, cnt))
     
     # Speichere die Debug-Daten in einer JSON-Datei
     with open("debug_meetings.json", "w", encoding="utf-8") as f:
