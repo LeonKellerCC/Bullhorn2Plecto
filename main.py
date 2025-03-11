@@ -136,6 +136,15 @@ def get_appointments(bhrest_token, rest_url):
         all_appointments.extend(appointments)
         start += count
     print(f"✅ Insgesamt {len(all_appointments)} Appointments abgerufen.")
+
+        # JSON-Datei speichern
+    debug_file = "debug_appointments.json"
+    with open(debug_file, "w", encoding="utf-8") as f:
+        json.dump({"data": all_appointments}, f, indent=4)
+
+    print(f"📁 Debug-Daten gespeichert unter: {debug_file}")
+
+    
     # Um die Kompatibilität mit dem bisherigen Code zu wahren, verpacken wir die Liste in ein Dict.
     return {"data": all_appointments}
 
