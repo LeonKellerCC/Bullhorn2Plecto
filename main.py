@@ -33,7 +33,7 @@ secret_client = SecretClient(vault_url=KV_URL, credential=credential)
 PLECTO_EMAIL = os.environ.get("PLECTO_EMAIL")
 PLECTO_PASSWORD = os.environ.get("PLECTO_PASSWORD")
 
-# Falls bereits eine Data Source existiert, kann hier deren UUID stehen.
+# Falls bereits eine Data Source in Plecto existiert, hier deren UUID eintragen.
 DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"
 
 
@@ -55,27 +55,27 @@ def get_bhresttoken_and_resturl(access_token):
 
 def debug_actions_table(bhrest_token, rest_url):
     """
-    Ruft die ersten 100 Notizen (Notes) ohne Filter ab und sammelt
-    die verschiedenen Werte des Feldes "action". Anschließend wird eine Tabelle mit
-    den einzelnen Aktionen und deren Häufigkeit ausgegeben.
+    Ruft die letzten 500 Notizen (unabhängig von action) ab, sortiert nach dateAdded absteigend,
+    und gibt eine Übersicht der verschiedenen action-Werte samt deren Häufigkeit in einer Tabelle aus.
     """
     if not rest_url.endswith("/"):
         rest_url += "/"
-    # Um alle Notizen abzurufen, verwenden wir die Query "*:*"
-    query_clause = "*:*"
+    query_clause = "*:*"  # Alle Notizen
+    # Sortierung: Die neuesten Notizen zuerst (descending nach dateAdded)
     endpoint = (
         f"{rest_url}search/Note?BhRestToken={bhrest_token}"
-        f"&fields=id,action&query={query_clause}&count=200000"
+        f"&fields=id,action,dateAdded"
+        f"&query={query_clause}&sort=dateAdded:desc&start=0&count=500"
     )
-    print("📅 Abrufe die ersten X Notizen (ohne Filter)...")
+    print("📅 Abrufe die letzten 500 Notizen...")
     headers = {"Accept": "application/json"}
     response = requests.get(endpoint, headers=headers)
     response.raise_for_status()
     data = response.json()
     notes = data.get("data", [])
-    print(f"✅ {len(notes)} Notizen abgerufen.")
+    print(f"✅ Insgesamt {len(notes)} Notizen abgerufen.")
     
-    # Zähle die Vorkommen der verschiedenen action-Werte
+    # Erstelle eine Übersicht der verschiedenen action-Werte
     action_counter = {}
     for note in notes:
         action = note.get("action")
@@ -83,33 +83,32 @@ def debug_actions_table(bhrest_token, rest_url):
             action = "None"
         action_counter[action] = action_counter.get(action, 0) + 1
 
-    # Tabelle ausgeben
-    print("\n--- Übersicht der action-Felder (erste X Notizen) ---")
-    print("{:<20} {:<10}".format("Action", "Count"))
-    print("-" * 30)
+    print("\n--- Übersicht der action-Felder (letzte 500 Notizen) ---")
+    print("{:<30} {:<10}".format("Action", "Count"))
+    print("-" * 40)
     for act, cnt in sorted(action_counter.items()):
-        print("{:<20} {:<10}".format(act, cnt))
+        print("{:<30} {:<10}".format(act, cnt))
     
-    # Optional: Debug-Datei speichern
+    # Speichere die Debug-Daten in einer JSON-Datei
     with open("debug_meetings.json", "w", encoding="utf-8") as f:
         json.dump({"data": notes}, f, indent=4)
     print("\n📝 Debug-Datei 'debug_meetings.json' wurde erstellt.")
 
 
 def main():
-    # Bullhorn Refresh Token abrufen (aus Azure Key Vault oder Umgebungsvariablen)
     try:
+        # Bullhorn: Refresh Token abrufen
         refresh_token_secret = secret_client.get_secret("BullhornRefreshToken")
         REFRESH_TOKEN = refresh_token_secret.value
         print("🔑 Refresh Token erfolgreich aus dem Key Vault geladen.")
     except Exception as ex:
         REFRESH_TOKEN = os.getenv("BULLHORN_INITIAL_REFRESH_TOKEN")
         print("⚠️  Kein gespeichertes Refresh Token gefunden. Verwende initiales Token.")
-
+    
     if not REFRESH_TOKEN or REFRESH_TOKEN.strip() == "":
         print("⚠️  Refresh Token ungültig oder nicht vorhanden. Verwende manuelles Fallback-Token.")
         REFRESH_TOKEN = MANUAL_FALLBACK_REFRESH_TOKEN
-
+    
     print("===== DEBUG: DIRECT CREDENTIALS =====")
     print("CLIENT_ID =", CLIENT_ID)
     print("CLIENT_SECRET =", CLIENT_SECRET)
@@ -118,7 +117,7 @@ def main():
     print("OAUTH_SWIMLANE =", OAUTH_SWIMLANE)
     print("======================================\n")
     
-    # Bullhorn: POST-Anfrage zum Abrufen des Access Tokens
+    # Bullhorn: Access Token abrufen
     token_url = f"https://auth-{OAUTH_SWIMLANE}.bullhornstaffing.com/oauth/token"
     data = {
         "grant_type": "refresh_token",
@@ -162,7 +161,7 @@ def main():
     
     bhrest_token, rest_url = get_bhresttoken_and_resturl(new_access_token)
     
-    # Abrufe die ersten 100 Notizen und zeige die verschiedenen action-Werte in einer Tabelle an
+    # Abrufe die letzten 500 Notizen und erstelle eine Übersicht der action-Felder
     debug_actions_table(bhrest_token, rest_url)
 
 
