@@ -38,10 +38,3 @@ jobs:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: |
           python main.py
-
-      - name: Speichere Debug-Datei als Artefakt
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-appointments
-          path: debug_appointments.json
