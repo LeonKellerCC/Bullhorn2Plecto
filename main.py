@@ -65,9 +65,9 @@ def debug_actions_table(bhrest_token, rest_url):
     query_clause = "*:*"
     endpoint = (
         f"{rest_url}search/Note?BhRestToken={bhrest_token}"
-        f"&fields=id,action&query={query_clause}&start=0"
+        f"&fields=id,action&query={query_clause}"
     )
-    print("📅 Abrufe die ersten 250 Notizen (ohne Filter)...")
+    print("📅 Abrufe die ersten X Notizen (ohne Filter)...")
     headers = {"Accept": "application/json"}
     response = requests.get(endpoint, headers=headers)
     response.raise_for_status()
@@ -84,7 +84,7 @@ def debug_actions_table(bhrest_token, rest_url):
         action_counter[action] = action_counter.get(action, 0) + 1
 
     # Tabelle ausgeben
-    print("\n--- Übersicht der action-Felder (erste 100 Notizen) ---")
+    print("\n--- Übersicht der action-Felder (erste X Notizen) ---")
     print("{:<20} {:<10}".format("Action", "Count"))
     print("-" * 30)
     for act, cnt in sorted(action_counter.items()):
