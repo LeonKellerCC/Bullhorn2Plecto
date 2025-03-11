@@ -66,10 +66,10 @@ def create_plecto_datasource(plecto_email, plecto_password):
     auth = (plecto_email, plecto_password)
     headers = {"Content-Type": "application/json"}
     payload = {
-        "title": "My Bullhorn Meetings",  # Data Source-Titel
+        "title": "My Bullhorn Meetings",
         "fields": [
             {
-                "name": "meeting_id",          # statt note_id
+                "name": "meeting_id",
                 "input": "TextInput",
                 "default_value": ""
             },
@@ -98,20 +98,19 @@ def get_meetings(bhrest_token, rest_url):
     Ruft alle Meetings ab, d.h. alle Notes, bei denen action="Meeting" gesetzt ist,
     über den /search-Endpunkt (mit Pagination).
     
-    Hier wird das Feld "commentingPerson" abgefragt, da dies den Ersteller der Note repräsentiert.
+    Dabei werden die Felder id, commentingPerson (als Ersatz für owner), action und dateAdded abgefragt.
     """
     if not rest_url.endswith("/"):
         rest_url += "/"
     all_meetings = []
     start = 0
     count = 100
-    # Lucene-Syntax: action:"Meeting"
-    query_clause = "action:\"Meeting\""
+    query_clause = "action:\"Meeting\""  # Lucene-Syntax
     
     while True:
         endpoint = (
             f"{rest_url}search/Note?BhRestToken={bhrest_token}"
-            f"&fields=id,commentingPerson,dateAdded"  # statt owner
+            f"&fields=id,commentingPerson(id,firstName,lastName),action,dateAdded"  # <-- angepasst
             f"&query={query_clause}&start={start}&count={count}"
         )
         print(f"📅 Abrufe Meetings (Start: {start})")
@@ -133,7 +132,7 @@ def get_meetings(bhrest_token, rest_url):
     
     print(f"✅ Insgesamt {len(all_meetings)} Meetings abgerufen.")
     
-    # Optional: Debug-Datei speichern
+    # Speichern als Debug-Datei (optional)
     with open("debug_meetings.json", "w", encoding="utf-8") as f:
         json.dump({"data": all_meetings}, f, indent=4)
     
@@ -152,7 +151,7 @@ def send_meetings_to_plecto(meetings_dict, data_source_uuid, plecto_email, plect
     headers = {"Content-Type": "application/json"}
     
     for meeting in meetings:
-        # Verwende das Feld "commentingPerson" anstelle von "owner"
+        # Verwende das Feld "commentingPerson" statt "owner"
         person = meeting.get("commentingPerson")
         if isinstance(person, dict):
             person_id = person.get("id")
@@ -173,7 +172,7 @@ def send_meetings_to_plecto(meetings_dict, data_source_uuid, plecto_email, plect
             "member_api_id": str(person_id),
             "member_name": person_name,
             "external_id": str(meeting.get("id")),
-            "meeting_id": str(meeting.get("id")),  # statt note_id
+            "meeting_id": str(meeting.get("id")),
             "date_added": date_added_iso
         }
         registrations.append(registration)
