@@ -105,7 +105,7 @@ def get_meetings(bhrest_token, rest_url):
     all_meetings = []
     start = 0
     count = 100
-    query_clause = "action:\"Meeting\""  # Lucene-Syntax
+    query_clause = "*:*"  # Lucene-Syntax
     
     while True:
         endpoint = (
