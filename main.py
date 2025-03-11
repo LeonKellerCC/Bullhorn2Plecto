@@ -65,7 +65,7 @@ def debug_actions_table(bhrest_token, rest_url):
     query_clause = "*:*"
     endpoint = (
         f"{rest_url}search/Note?BhRestToken={bhrest_token}"
-        f"&fields=id,action&query={query_clause}"
+        f"&fields=id,action&query={query_clause}&count=200000"
     )
     print("📅 Abrufe die ersten X Notizen (ohne Filter)...")
     headers = {"Accept": "application/json"}
