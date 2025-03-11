@@ -55,33 +55,48 @@ def get_bhresttoken_and_resturl(access_token):
 
 def debug_actions_table(bhrest_token, rest_url):
     """
-    Ruft die letzten 500 Notizen (unabhängig von action) ab, sortiert nach dateAdded absteigend,
-    und gibt eine Übersicht der verschiedenen action-Felder samt deren Häufigkeit in einer Tabelle aus.
+    Ruft bis zu 500 Notizen (Notes) ab (beginnend mit den neuesten), indem in mehreren Requests jeweils 100 Notizen abgerufen werden.
+    Dabei wird der Query-Parameter auf "id:*" gesetzt, um alle Notizen zu erfassen.
+    Anschließend wird eine Übersicht der verschiedenen action-Felder samt deren Häufigkeit ausgegeben.
     """
     if not rest_url.endswith("/"):
         rest_url += "/"
-    query_clause = "*:*"  # Alle Notizen abrufen
-    # URL-kodierter Sortierparameter: "dateAdded:desc" -> "dateAdded%3Adesc"
-    endpoint = (
-        f"{rest_url}search/Note?BhRestToken={bhrest_token}"
-        f"&fields=id,action,dateAdded"
-        f"&query={query_clause}&sort=dateAdded%3Adesc&start=0&count=500"
-    )
-    print("📅 Abrufe die letzten 500 Notizen...")
-    headers = {"Accept": "application/json"}
-    response = requests.get(endpoint, headers=headers)
-    response.raise_for_status()
-    data = response.json()
-    notes = data.get("data", [])
-    print(f"✅ Insgesamt {len(notes)} Notizen abgerufen.")
     
-    # Zähle die Vorkommen der verschiedenen action-Werte
+    all_notes = []
+    start = 0
+    count = 100
+    total_to_fetch = 500
+    # Verwende "id:*" als Query, um alle Notizen abzurufen.
+    query_clause = "id:*"
+    
+    while len(all_notes) < total_to_fetch:
+        endpoint = (
+            f"{rest_url}search/Note?BhRestToken={bhrest_token}"
+            f"&fields=id,action,dateAdded"
+            f"&query={query_clause}&sort=dateAdded%3Adesc&start={start}&count={count}"
+        )
+        print(f"📅 Abrufe Notizen (Start: {start})")
+        headers = {"Accept": "application/json"}
+        response = requests.get(endpoint, headers=headers)
+        if response.status_code != 200:
+            print(f"❌ Fehler beim Abrufen der Notizen: {response.status_code}")
+            print(response.text)
+            break
+        data = response.json()
+        notes = data.get("data", [])
+        if not notes:
+            print("✅ Keine weiteren Notizen gefunden.")
+            break
+        all_notes.extend(notes)
+        start += count
+    
+    print(f"✅ Insgesamt {len(all_notes)} Notizen abgerufen.")
+    
+    # Zähle die verschiedenen action-Werte
     action_counter = {}
-    for note in notes:
-        action = note.get("action")
-        if action is None:
-            action = "None"
-        action_counter[action] = action_counter.get(action, 0) + 1
+    for note in all_notes:
+        act = note.get("action") or "None"
+        action_counter[act] = action_counter.get(act, 0) + 1
     
     print("\n--- Übersicht der action-Felder (letzte 500 Notizen) ---")
     print("{:<40} {:<10}".format("Action", "Count"))
@@ -89,9 +104,9 @@ def debug_actions_table(bhrest_token, rest_url):
     for act, cnt in sorted(action_counter.items()):
         print("{:<40} {:<10}".format(act, cnt))
     
-    # Speichere die Debug-Daten in einer JSON-Datei
+    # Speichern als Debug-Datei
     with open("debug_meetings.json", "w", encoding="utf-8") as f:
-        json.dump({"data": notes}, f, indent=4)
+        json.dump({"data": all_notes}, f, indent=4)
     print("\n📝 Debug-Datei 'debug_meetings.json' wurde erstellt.")
 
 
