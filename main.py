@@ -37,7 +37,7 @@ PLECTO_PASSWORD = os.environ.get("PLECTO_PASSWORD")
 # Falls Du schon eine Data Source in Plecto erstellt hast,
 # kannst Du hier deren UUID eintragen. Ansonsten wird versucht,
 # eine neue Data Source anzulegen.
-DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"  # z. B. "70a0d1kg780a4cd98f541c214601030e"
+DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"  # Beispiel: "70a0d1kg780a4cd98f541c214601030e"
 
 # ===============================
 # Funktionen
@@ -104,30 +104,26 @@ def create_plecto_datasource(plecto_email, plecto_password):
         return None
 
 
-def get_meeting_notes(bhrest_token, rest_url):
+def get_meeting_notes(bhrest_token, rest_url, desired_action="Meeting"):
     """
-    Ruft alle Meeting-Notes von Bullhorn ab.
-    Dabei wird der Search-Endpunkt verwendet und es werden nur Notes mit
-    action="Meeting" berücksichtigt.
+    Ruft alle Notes von Bullhorn über den Search-Endpunkt ab und filtert lokal nach dem gewünschten action-Wert.
+    Da der Search-Endpunkt keine exakte Filterung auf action unterstützt, holen wir alle Notes und filtern in Python.
     """
     if not rest_url.endswith("/"):
         rest_url += "/"
     all_notes = []
     start = 0
     count = 100  # Anzahl der Datensätze pro Anfrage
-
-    # Verwende den Search-Endpunkt für Notes
     endpoint = f"{rest_url}search/Note"
-    
+
     while True:
         params = {
-            "query": 'action:"Kundenbesuch"',  # Filter: nur Meeting-Notes
             "fields": "id,action,dateAdded,commentingPerson(id,firstName,lastName)",
             "start": start,
             "count": count,
             "BhRestToken": bhrest_token
         }
-        print(f"📅 Abrufe Meeting-Notes (Start: {start})")
+        print(f"📅 Abrufe Notes (Start: {start})")
         headers = {"Accept": "application/json"}
         response = requests.get(endpoint, headers=headers, params=params)
         if response.status_code != 200:
@@ -137,13 +133,18 @@ def get_meeting_notes(bhrest_token, rest_url):
         data = response.json()
         notes = data.get("data", [])
         if not notes:
-            print("✅ Keine weiteren Meeting-Notes gefunden.")
+            print("✅ Keine weiteren Notes gefunden.")
             break
-        all_notes.extend(notes)
+
+        # Debug: Ausgabe der in dieser Charge gefundenen action-Werte
+        actions_in_batch = {note.get("action") for note in notes}
+        print(f"DEBUG: Gefundene action-Werte in diesem Batch: {actions_in_batch}")
+
+        # Lokales Filtern der Notes nach dem gewünschten action-Wert
+        filtered_notes = [n for n in notes if n.get("action") == desired_action]
+        all_notes.extend(filtered_notes)
         start += count
-    print(f"✅ Insgesamt {len(all_notes)} Meeting-Notes abgerufen.")
-    
-    # Um die Kompatibilität mit dem bisherigen Code zu wahren, verpacken wir die Liste in ein Dict.
+    print(f"✅ Insgesamt {len(all_notes)} Notes mit action='{desired_action}' abgerufen.")
     return {"data": all_notes}
 
 
@@ -160,7 +161,7 @@ def send_registrations_to_plecto(notes_dict, data_source_uuid, plecto_email, ple
     headers = {"Content-Type": "application/json"}
     
     for note in notes:
-        # Anstatt 'owner' verwenden wir 'commentingPerson'
+        # Verwende 'commentingPerson' anstelle von 'owner'
         commenter = note.get("commentingPerson", {})
         date_added_ms = note.get("dateAdded")
         date_added_iso = datetime.datetime.fromtimestamp(date_added_ms / 1000, datetime.timezone.utc).isoformat() if date_added_ms else None
@@ -265,7 +266,9 @@ def main():
     print("💾 Refresh Token erfolgreich im Key Vault gespeichert.")
     
     bhrest_token, rest_url = get_bhresttoken_and_resturl(new_access_token)
-    notes = get_meeting_notes(bhrest_token, rest_url)
+    
+    # Hier kannst Du den gewünschten action-Wert anpassen, z.B. "Meeting" oder "Kundenbesuch"
+    notes = get_meeting_notes(bhrest_token, rest_url, desired_action="Meeting")
     
     # Sende die Bullhorn-Daten als Registrierungen an Plecto
     send_registrations_to_plecto(notes, DATA_SOURCE_UUID, PLECTO_EMAIL, PLECTO_PASSWORD)
