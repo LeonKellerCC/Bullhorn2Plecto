@@ -105,7 +105,7 @@ def create_plecto_datasource(plecto_email, plecto_password):
 def get_appointments(bhrest_token, rest_url):
     """
     Ruft alle Appointment-Daten von Bullhorn über den Query-Endpunkt ab (mit Pagination).
-    Standardmäßig werden ALLE Appointments abgerufen (where_clause = "id>0").
+    Standardmäßig werden ALLE Appointments abgerufen, die nicht gelöscht sind (where_clause = "id>0 AND isDeleted=FALSE").
     
     Falls Du zukünftig nur noch neue Appointments abrufen möchtest, 
     kannst Du den where_clause entsprechend anpassen (z. B. mit einem Datumsfilter).
@@ -115,7 +115,7 @@ def get_appointments(bhrest_token, rest_url):
     all_appointments = []
     start = 0
     count = 100  # Anzahl der Datensätze pro Anfrage
-    where_clause = "id>0"  # Hier ggf. anpassen, um nur neue Einträge abzurufen.
+    where_clause = "id>0 AND isDeleted=FALSE"
     
     while True:
         endpoint = (f"{rest_url}query/Appointment?BhRestToken={bhrest_token}"
