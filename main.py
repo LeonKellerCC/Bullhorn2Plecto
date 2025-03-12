@@ -33,11 +33,7 @@ secret_client = SecretClient(vault_url=KV_URL, credential=credential)
 # ===============================
 PLECTO_EMAIL = os.environ.get("PLECTO_EMAIL")
 PLECTO_PASSWORD = os.environ.get("PLECTO_PASSWORD")
-
-# Falls Du schon eine Data Source in Plecto erstellt hast,
-# kannst Du hier deren UUID eintragen. Ansonsten wird versucht,
-# eine neue Data Source anzulegen.
-DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"  # z. B. "70a0d1kg780a4cd98f541c214601030e"
+DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"
 
 
 # ===============================
@@ -57,49 +53,6 @@ def get_bhresttoken_and_resturl(access_token):
     print("✅ BhRestToken:", bhrest_token)
     print("🌐 REST URL:", rest_url)
     return bhrest_token, rest_url
-
-
-def create_plecto_datasource(plecto_email, plecto_password):
-    """
-    Erstellt eine neue API Data Source in Plecto über Basic Authentication.
-    Die POST-Anfrage wird an https://app.plecto.com/api/v2/datasources/ gesendet.
-    
-    Das Payload enthält einen Titel und eine Liste von Feldern.
-    """
-    url = "https://app.plecto.com/api/v2/datasources/"
-    auth = (plecto_email, plecto_password)
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "title": "My Bullhorn Appointments",
-        "fields": [
-            {
-                "name": "appointment_id",
-                "input": "TextInput",
-                "default_value": ""
-            },
-            {
-                "name": "date_added",
-                "input": "TextInput",  # Statt DateTimeInput
-                "default_value": ""
-            },
-            {
-                "name": "date_begin",
-                "input": "TextInput",  # Statt DateTimeInput
-                "default_value": ""
-            }
-        ]
-    }
-    print("📤 Erstelle Plecto Data Source...")
-    response = requests.post(url, auth=auth, headers=headers, data=json.dumps(payload))
-    if response.status_code == 201:
-        ds = response.json()
-        print("✅ Data Source erfolgreich erstellt!")
-        print("Antwort:", ds)
-        return ds.get("id")
-    else:
-        print("❌ Fehler beim Erstellen der Data Source:")
-        print(response.status_code, response.text)
-        return None
 
 
 def get_appointments(bhrest_token, rest_url):
@@ -191,11 +144,6 @@ def send_registrations_to_plecto(appointments_dict, data_source_uuid, plecto_ema
 def main():
     # Optional: Erstelle in Plecto eine neue Data Source, falls noch nicht vorhanden.
     global DATA_SOURCE_UUID
-    if DATA_SOURCE_UUID is None:
-        DATA_SOURCE_UUID = create_plecto_datasource(PLECTO_EMAIL, PLECTO_PASSWORD)
-        if DATA_SOURCE_UUID is None:
-            # Falls das Erstellen fehlschlägt, kannst Du hier alternativ die vorhandene UUID eintragen.
-            DATA_SOURCE_UUID = "4a95b33cba6a44e49eaf44011fc3d448"
     
     # Bullhorn: Refresh Token abrufen (aus dem Key Vault oder Umgebungsvariablen)
     try:
